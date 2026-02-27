@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+venv/
+.envrc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data
+data/raw/
+data/processed/
+*.csv
+*.parquet
+
+# Models
+models/
+*.joblib
+*.pkl
+
+# Logs
+logs/
+*.log
+
+# Mac / Linux
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Coverage
+htmlcov/
+.coverage
+.pytest_cache/
