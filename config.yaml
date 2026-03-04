@@ -1,0 +1,11 @@
+andom_seed: 42
+
+target: defasado_bin
+problem_type: classification
+
+metric: roc_auc
+
+evaluation_strategy: stratified_kfold
+n_splits: 5
+
+test_size: 0.2

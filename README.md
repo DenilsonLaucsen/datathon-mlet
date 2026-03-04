@@ -14,6 +14,29 @@ Construir uma pipeline completa de ML, incluindo:
 - Testes automatizados
 - Monitoramento
 
+## Dataset - Projeto Defasagem
+
+### Origem
+BASE DE DADOS PEDE 2024 - DATATHON.xlsx
+
+### Estrutura
+- **3030 registros**
+- **50 colunas**
+- Dados longitudinais (2022–2024)
+
+### Target
+`defasado_bin` (variável binária derivada de `Defasagem < 0`)
+
+A variável `Defasagem` indica a diferença entre a fase ideal e a fase real do aluno. Transformada em variável binária para interpretabilidade e aplicabilidade prática, indicando se o aluno está ou não defasado. A distribuição é aproximadamente balanceada (55% vs 45%).
+
+### Problemas conhecidos
+- Colunas com alto missing (>70%)
+- Colunas 100% vazias removidas
+- Algumas variáveis duplicadas
+- Necessário remover variáveis com colinearidade para evitar vazamento de informação
+
+Detalhes completos da exploração estão em [notebooks/1_data_overview.ipynb](notebooks/1_data_overview.ipynb).
+
 ## Estrutura de Pastas
 
 - **app/** - Aplicação FastAPI com rotas e modelo
