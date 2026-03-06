@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.data_cleaning import (
+from src.data.cleaning import (
     converter_numericas,
     organizar_inde,
     organizar_pedra,

@@ -2,7 +2,7 @@ from typing import Dict
 
 import pandas as pd
 
-from .data_cleaning import processar_dataset
+from .cleaning import processar_dataset
 
 
 def consolidar_datasets(datasets: Dict[int, pd.DataFrame]) -> pd.DataFrame:

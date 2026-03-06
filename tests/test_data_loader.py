@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.data_loader import carregar_planilhas
+from src.data.loader import carregar_planilhas
 
 
 class TestCarregarPlanilhas:

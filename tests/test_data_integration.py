@@ -2,13 +2,13 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.data_integration import consolidar_datasets
+from src.data.integration import consolidar_datasets
 
 
 class TestConsolidarDatasets:
     """Testes para a função consolidar_datasets"""
 
-    @patch("src.data_integration.processar_dataset")
+    @patch("src.data.integration.processar_dataset")
     def test_consolidar_datasets_retorna_dataframe(self, mock_processar):
         """Testa se consolidar_datasets retorna um DataFrame"""
         # Arrange
@@ -25,7 +25,7 @@ class TestConsolidarDatasets:
         # Assert
         assert isinstance(resultado, pd.DataFrame)
 
-    @patch("src.data_integration.processar_dataset")
+    @patch("src.data.integration.processar_dataset")
     def test_consolidar_datasets_processa_todos_anos(self, mock_processar):
         """Testa se todos os datasets são processados"""
         # Arrange
@@ -42,7 +42,7 @@ class TestConsolidarDatasets:
         # Assert
         assert mock_processar.call_count == 3
 
-    @patch("src.data_integration.processar_dataset")
+    @patch("src.data.integration.processar_dataset")
     def test_consolidar_datasets_concatena_corretamente(self, mock_processar):
         """Testa se os datasets são concatenados corretamente"""
         # Arrange
@@ -64,7 +64,7 @@ class TestConsolidarDatasets:
         assert len(resultado) == 6
         assert list(resultado["col1"]) == [1, 2, 3, 4, 5, 6]
 
-    @patch("src.data_integration.processar_dataset")
+    @patch("src.data.integration.processar_dataset")
     def test_consolidar_datasets_preserve_colunas(self, mock_processar):
         """Testa se as colunas são preservadas após consolidação"""
         # Arrange
@@ -86,7 +86,7 @@ class TestConsolidarDatasets:
         assert "col2" in resultado.columns
         assert "col3" in resultado.columns
 
-    @patch("src.data_integration.processar_dataset")
+    @patch("src.data.integration.processar_dataset")
     def test_consolidar_datasets_dataset_vazio(self, mock_processar):
         """Testa consolidação com apenas um dataset"""
         # Arrange
@@ -100,7 +100,7 @@ class TestConsolidarDatasets:
         # Assert
         assert isinstance(resultado, pd.DataFrame)
 
-    @patch("src.data_integration.processar_dataset")
+    @patch("src.data.integration.processar_dataset")
     def test_consolidar_datasets_chama_processar_com_ano(self, mock_processar):
         """Testa se processar_dataset é chamado com os parâmetros corretos"""
         # Arrange

@@ -1,4 +1,4 @@
-andom_seed: 42
+random_seed: 42
 
 target: defasado_bin
 problem_type: classification
