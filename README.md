@@ -130,33 +130,47 @@ Verificar tipos com mypy:
 make typecheck
 ```
 
-## API
+## Executando a Aplicação
 
-### Desenvolvimento
+### Com Makefile (recomendado)
 
-Rodar API em modo desenvolvimento com reload automático:
+**Desenvolvimento:**
 ```bash
 make run
 ```
 
-Ou manualmente:
+**Produção:**
+```bash
+make run-prod
+```
+
+### Manualmente
+
+**Desenvolvimento (com reload automático):**
 ```bash
 source .venv/bin/activate
 python -m uvicorn app.main:app --reload
 ```
 
-### Produção
-
-Rodar API em modo produção:
-```bash
-make run-prod
-```
-
-Ou manualmente:
+**Produção:**
 ```bash
 source .venv/bin/activate
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+### Docker
+
+**Build da imagem:**
+```bash
+docker build -t datathon-ml-api .
+```
+
+**Executar container:**
+```bash
+docker run -p 8000:8000 datathon-ml-api
+```
+
+A aplicação estará disponível em `http://localhost:8000`.
 
 ### Endpoints
 
@@ -338,4 +352,13 @@ Para analisar erros em experimentos:
 grep "ERROR" artifacts/logs/*.log
 ```
 
-## Docker
+## CI/CD - GitHub Actions
+
+O projeto utiliza GitHub Actions para automação de testes e build:
+
+- **Executa** validação de tipos com mypy
+- **Executa** suite de testes automatizados
+- **Constrói** imagem Docker da aplicação
+- **Dispara** a cada push em `main` e `dev`, e em pull requests
+
+Ver configuração em [.github/workflows/ci.yml](.github/workflows/ci.yml)

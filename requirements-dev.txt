@@ -8,3 +8,4 @@ mypy==1.10.0
 seaborn==0.13.2
 httpx==0.26.0
 ipykernel
+types-PyYAML
