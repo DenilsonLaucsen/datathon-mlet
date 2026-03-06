@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.egg-info/
+dist/
+build/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Ambientes e configurações locais
+.env
+.env.local
+.env.*.local
+
+# Desenvolvimento
+Makefile
+mypy.ini
+requirements-dev.txt
+notebooks/
+tests/
+
+# Documentação local
+README.md
+
+# Logs e artefatos de desenvolvimento
+artifacts/logs/
+*.log

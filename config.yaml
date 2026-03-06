@@ -8,4 +8,6 @@ metric: roc_auc
 evaluation_strategy: stratified_kfold
 n_splits: 5
 
+best_model: gb
+
 test_size: 0.2

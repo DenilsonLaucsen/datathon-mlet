@@ -1,7 +1,16 @@
 from fastapi import FastAPI
 
-from app.routes import router
+from app.predict import predict
+from app.schemas import PredictionRequest, PredictionResponse
 
-app = FastAPI(title="Datathon ML API")
+app = FastAPI(title="Student Defasagem Predictor", version="1.0.0")
 
-app.include_router(router)
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict_endpoint(request: PredictionRequest):
+    return predict(request)

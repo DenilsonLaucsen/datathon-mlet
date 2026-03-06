@@ -11,7 +11,7 @@ sanity:
 	$(PYTHON) -m src.sanity_check
 
 test:
-	$(PYTHON) -m pytest tests/ --cov=src --cov-report=term-missing -v
+	$(PYTHON) -m pytest tests/ --cov=. --cov-report=term-missing -v
 
 format:
 	$(PYTHON) -m black app src tests
