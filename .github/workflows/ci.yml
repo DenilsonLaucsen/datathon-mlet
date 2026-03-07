@@ -37,7 +37,7 @@ jobs:
       - name: Train model
         if: github.ref == 'refs/heads/main'
         run: |
-          python -m scripts.train
+          python -m src.train
 
       - name: Build Docker image
         run: |
