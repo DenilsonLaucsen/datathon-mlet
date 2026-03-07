@@ -18,7 +18,7 @@ def train(
     dataset_path: str = "data/processed/dataset_academic.csv",
     features_path: str = "artifacts/feature_cols.json",
     output_dir: str = "artifacts/models",
-    model_name: str = None,
+    model_name: str | None = None,
 ) -> Dict[str, Any]:
     """
     Treina modelo de ML com pipeline configurado.
