@@ -12,12 +12,6 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data
-data/raw/
-data/processed/
-*.csv
-*.parquet
-
 # Models
 models/
 *.joblib
