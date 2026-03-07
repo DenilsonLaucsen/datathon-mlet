@@ -56,5 +56,6 @@ tests/
 README.md
 
 # Logs e artefatos de desenvolvimento
-artifacts/logs/
+artifacts/logs/*
+artifacts/tmp/
 *.log
