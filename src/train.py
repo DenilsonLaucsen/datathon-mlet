@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+from typing import Any, Dict
 
 import joblib
 import pandas as pd
@@ -11,77 +12,110 @@ from src.logger import setup_logger
 from src.pipeline import build_pipeline
 from src.utils import load_config, load_features
 
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
 
-log_path = f"artifacts/logs/train_{timestamp}.log"
+def train(
+    config_path: str = "config.yaml",
+    dataset_path: str = "data/processed/dataset_academic.csv",
+    features_path: str = "artifacts/feature_cols.json",
+    output_dir: str = "artifacts/models",
+    model_name: str = None,
+) -> Dict[str, Any]:
+    """
+    Treina modelo de ML com pipeline configurado.
 
-logger = setup_logger(name="train", log_file=log_path)
+    Args:
+        config_path: Caminho para arquivo de configuração YAML
+        dataset_path: Caminho para dataset processado
+        features_path: Caminho para arquivo JSON com features
+        output_dir: Diretório para salvar modelo e relatório
+        model_name: Nome do modelo. Se None, usa valor de config
 
-logger.info("Carregando configuração")
+    Returns:
+        Dict com chaves:
+            - model: Pipeline treinado
+            - metrics: Dicionário com métricas (roc_auc, f1, precision, recall)
+            - model_path: Caminho onde modelo foi salvo
+            - report_path: Caminho onde relatório foi salvo
+    """
+    # Setup logging
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    log_path = f"artifacts/logs/train_{timestamp}.log"
+    logger = setup_logger(name="train", log_file=log_path)
 
-cfg = load_config("config.yaml")
+    # Carregamento de configuração
+    logger.info("Carregando configuração")
+    cfg = load_config(config_path)
 
-RANDOM_SEED = cfg["random_seed"]
-TARGET = cfg["target"]
-MODEL_NAME = cfg["best_model"]
+    RANDOM_SEED = cfg["random_seed"]
+    TARGET = cfg["target"]
+    MODEL_NAME = model_name or cfg["best_model"]
 
-logger.info(f"Modelo escolhido: {MODEL_NAME}")
+    logger.info(f"Modelo escolhido: {MODEL_NAME}")
 
-DATASET = "data/processed/dataset_academic.csv"
-FEATURES_JSON = "artifacts/feature_cols.json"
+    # Carregamento de features
+    logger.info("Carregando features")
+    features = load_features(features_path)
 
-logger.info("Carregando features")
+    # Carregamento de dataset
+    logger.info("Carregando dataset")
+    df = pd.read_csv(dataset_path)
 
-features = load_features(FEATURES_JSON)
+    df = df.dropna(subset=[TARGET])
 
-logger.info("Carregando dataset")
+    logger.info(f"Dataset possui {df.shape[0]} linhas")
 
-df = pd.read_csv(DATASET)
+    X = df[features]
+    y = df[TARGET]
 
-df = df.dropna(subset=[TARGET])
+    # Divisão treino/validação
+    logger.info("Dividindo treino e validação")
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_SEED, stratify=y
+    )
 
-logger.info(f"Dataset possui {df.shape[0]} linhas")
+    # Construção do pipeline
+    logger.info("Construindo pipeline")
+    pipeline = build_pipeline(features=features, model_name=MODEL_NAME)
 
-X = df[features]
-y = df[TARGET]
+    # Treinamento
+    logger.info("Treinando modelo")
+    pipeline.fit(X_train, y_train)
 
-logger.info("Dividindo treino e validação")
+    # Avaliação
+    logger.info("Avaliando modelo")
+    preds = pipeline.predict(X_val)
+    probs = pipeline.predict_proba(X_val)[:, 1]
 
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.2, random_state=RANDOM_SEED, stratify=y
-)
+    metrics = {
+        "roc_auc": float(roc_auc_score(y_val, probs)),
+        "f1": float(f1_score(y_val, preds)),
+        "precision": float(precision_score(y_val, preds)),
+        "recall": float(recall_score(y_val, preds)),
+    }
 
-logger.info("Construindo pipeline")
+    logger.info(f"Métricas: {metrics}")
 
-pipeline = build_pipeline(features=features, model_name=MODEL_NAME)
+    # Persistência
+    os.makedirs(output_dir, exist_ok=True)
 
-logger.info("Treinando modelo")
+    model_path = os.path.join(output_dir, "best_model.joblib")
+    report_path = os.path.join(output_dir, "best_model_metrics.json")
 
-pipeline.fit(X_train, y_train)
+    joblib.dump(pipeline, model_path)
 
-logger.info("Avaliando modelo")
+    with open(report_path, "w") as f:
+        json.dump(metrics, f, indent=4)
 
-preds = pipeline.predict(X_val)
-probs = pipeline.predict_proba(X_val)[:, 1]
+    logger.info(f"Modelo salvo em: {model_path}")
+    logger.info(f"Relatório salvo em: {report_path}")
 
-metrics = {
-    "roc_auc": float(roc_auc_score(y_val, probs)),
-    "f1": float(f1_score(y_val, preds)),
-    "precision": float(precision_score(y_val, preds)),
-    "recall": float(recall_score(y_val, preds)),
-}
+    return {
+        "model": pipeline,
+        "metrics": metrics,
+        "model_path": model_path,
+        "report_path": report_path,
+    }
 
-logger.info(metrics)
 
-os.makedirs("artifacts/models", exist_ok=True)
-
-model_path = "artifacts/models/best_model.joblib"
-report_path = "artifacts/models/best_model_metrics.json"
-
-joblib.dump(pipeline, model_path)
-
-with open(report_path, "w") as f:
-    json.dump(metrics, f, indent=4)
-
-logger.info(f"Modelo salvo em: {model_path}")
-logger.info(f"Relatório salvo em: {report_path}")
+if __name__ == "__main__":
+    train()

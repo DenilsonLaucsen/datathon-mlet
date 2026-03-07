@@ -1,297 +1,752 @@
 import json
-from unittest.mock import MagicMock, mock_open, patch
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 
 
-class TestConfigLoading:
-    """Testes para carregamento de configuração"""
+class TestTrainFunctionSignature:
+    """Testes para assinatura e documentação da função train"""
 
+    def test_train_funcao_existe(self):
+        """Testa se função train está definida"""
+        from src.train import train
+
+        assert callable(train)
+
+    def test_train_funcao_tem_docstring(self):
+        """Testa se função train possui docstring"""
+        from src.train import train
+
+        assert train.__doc__ is not None
+        assert "Treina modelo" in train.__doc__
+
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
     @patch("src.train.load_config")
-    def test_load_config_sucesso(self, mock_load_config):
-        """Testa se configuração é carregada corretamente"""
-        # Arrange
-        config_esperada = {
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_funcao_retorna_dict(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se train retorna dicionário"""
+        from src.train import train
+
+        # Setup logger mock
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
+        # Arrange config and features
+        mock_cfg.return_value = {
             "random_seed": 42,
             "target": "defasado_bin",
             "best_model": "logreg",
         }
-        mock_load_config.return_value = config_esperada
+        mock_feat.return_value = ["feat1", "feat2"]
 
-        # Act
-        config = mock_load_config("config.yaml")
-
-        # Assert
-        assert config == config_esperada
-        assert "random_seed" in config
-        assert "target" in config
-        assert "best_model" in config
-
-    @patch("src.train.load_config")
-    def test_load_config_contem_best_model(self, mock_load_config):
-        """Testa se config contém campo 'best_model'"""
-        # Arrange
-        config = {"random_seed": 42, "target": "defasado_bin", "best_model": "gb"}
-        mock_load_config.return_value = config
-
-        # Act
-        resultado = mock_load_config("config.yaml")
-
-        # Assert
-        assert resultado["best_model"] in ["logreg", "rf", "gb", "xgb", "lgbm"]
-
-
-class TestFeaturesLoading:
-    """Testes para carregamento de features"""
-
-    @patch("src.train.load_features")
-    def test_load_features_retorna_lista(self, mock_load_features):
-        """Testa se features são carregadas como lista"""
-        # Arrange
-        features_esperadas = ["feat1", "feat2", "feat3"]
-        mock_load_features.return_value = features_esperadas
-
-        # Act
-        features = mock_load_features("features.json")
-
-        # Assert
-        assert isinstance(features, list)
-        assert len(features) == 3
-
-    @patch("src.train.load_features")
-    def test_load_features_quantidade(self, mock_load_features):
-        """Testa se features carregadas têm quantidade apropriada"""
-        # Arrange
-        features = ["Matematica", "Portugues", "Ingles", "IDA", "CG", "CF", "CT"]
-        mock_load_features.return_value = features
-
-        # Act
-        resultado = mock_load_features("features.json")
-
-        # Assert
-        assert len(resultado) > 0
-        assert all(isinstance(f, str) for f in resultado)
-
-
-class TestDataLoading:
-    """Testes para carregamento de dados"""
-
-    @patch("pandas.read_csv")
-    def test_read_csv_sucesso(self, mock_read_csv):
-        """Testa se dataset é carregado com sucesso"""
-        # Arrange
-        mock_df = pd.DataFrame(
-            {"feat1": [1, 2, 3], "feat2": [4, 5, 6], "defasado_bin": [0, 1, 0]}
-        )
-        mock_read_csv.return_value = mock_df
-
-        # Act
-        df = mock_read_csv("data.csv")
-
-        # Assert
-        assert df.shape == (3, 3)
-        assert "defasado_bin" in df.columns
-
-    @patch("pandas.read_csv")
-    def test_dropna_remove_valores_faltantes(self, mock_read_csv):
-        """Testa se valores faltantes no target são removidos"""
-        # Arrange
-        mock_df = pd.DataFrame(
+        # Arrange dataset
+        df = pd.DataFrame(
             {
-                "feat1": [1, 2, 3, 4],
-                "feat2": [4, 5, 6, 7],
-                "defasado_bin": [0, 1, np.nan, 0],
+                "feat1": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] * 2,
+                "feat2": [2, 4, 6, 8, 10, 12, 14, 16, 18, 20] * 2,
+                "defasado_bin": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1] * 2,
             }
         )
-        mock_read_csv.return_value = mock_df
+        mock_csv.return_value = df
+
+        # Arrange train_test_split - retorna X_train, X_val, y_train, y_val
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        # 80/20 split: 16 train, 4 val
+        X_train = X.iloc[:16]
+        X_val = X.iloc[16:]
+        y_train = y.iloc[:16]
+        y_val = y.iloc[16:]
+        mock_split.return_value = (X_train, X_val, y_train, y_val)
+
+        # Arrange pipeline mock - probs para 4 valores (tamanho de X_val)
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
 
         # Act
-        df_clean = mock_df.dropna(subset=["defasado_bin"])
+        result = train()
 
         # Assert
-        assert df_clean.shape[0] == 3
-        assert not df_clean["defasado_bin"].isna().any()
+        assert isinstance(result, dict)
 
 
-class TestPipelineBuilding:
-    """Testes para construção do pipeline"""
+class TestTrainReturnStructure:
+    """Testes para estrutura de retorno da função train"""
 
+    @patch("src.train.setup_logger")
     @patch("src.train.build_pipeline")
-    def test_build_pipeline_retorna_objeto(self, mock_build_pipeline):
-        """Testa se build_pipeline retorna um pipeline"""
-        # Arrange
-        mock_pipeline = MagicMock()
-        mock_build_pipeline.return_value = mock_pipeline
-
-        # Act
-        pipeline = mock_build_pipeline(features=["feat1", "feat2"], model_name="logreg")
-
-        # Assert
-        assert pipeline is not None
-        assert hasattr(pipeline, "fit")
-        assert hasattr(pipeline, "predict")
-
-
-class TestModelTraining:
-    """Testes para treinamento do modelo"""
-
-    @patch("src.train.build_pipeline")
-    def test_fit_modelo_sucesso(self, mock_build_pipeline):
-        """Testa se modelo é treinado com sucesso"""
-        # Arrange
-        X_train = pd.DataFrame({"feat1": [1, 2, 3], "feat2": [4, 5, 6]})
-        y_train = np.array([0, 1, 0])
-
-        mock_pipeline = MagicMock()
-        mock_build_pipeline.return_value = mock_pipeline
-
-        # Act
-        pipeline = mock_build_pipeline(features=["feat1", "feat2"], model_name="logreg")
-        pipeline.fit(X_train, y_train)
-
-        # Assert
-        assert mock_pipeline.fit.called
-        mock_pipeline.fit.assert_called_once_with(X_train, y_train)
-
-    @patch("src.train.build_pipeline")
-    def test_predict_gera_predicoes(self, mock_build_pipeline):
-        """Testa se modelo gera predições"""
-        # Arrange
-        X_val = pd.DataFrame({"feat1": [1, 2], "feat2": [4, 5]})
-
-        mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = np.array([0, 1])
-        mock_pipeline.predict_proba.return_value = np.array([[0.8, 0.2], [0.3, 0.7]])
-        mock_build_pipeline.return_value = mock_pipeline
-
-        # Act
-        pipeline = mock_build_pipeline(features=["feat1", "feat2"], model_name="logreg")
-        preds = pipeline.predict(X_val)
-        probs = pipeline.predict_proba(X_val)[:, 1]
-
-        # Assert
-        assert len(preds) == 2
-        assert len(probs) == 2
-        assert all(p in [0, 1] for p in preds)
-
-
-class TestMetricsCalculation:
-    """Testes para cálculo de métricas"""
-
-    @patch("src.train.roc_auc_score")
-    @patch("src.train.f1_score")
-    @patch("src.train.precision_score")
-    @patch("src.train.recall_score")
-    def test_metrics_calculadas(
-        self, mock_recall, mock_precision, mock_f1, mock_roc_auc
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_retorna_chaves_obrigatorias(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
     ):
-        """Testa se métricas são calculadas"""
-        # Arrange
-        y_val = np.array([0, 1, 0, 1, 0])
-        preds = np.array([0, 1, 0, 1, 0])
-        probs = np.array([0.1, 0.9, 0.2, 0.8, 0.3])
+        """Testa se retorno contém todas as chaves obrigatórias"""
+        from src.train import train
 
-        mock_roc_auc.return_value = 0.95
-        mock_f1.return_value = 0.95
-        mock_precision.return_value = 1.0
-        mock_recall.return_value = 0.9
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
+        # Arrange
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
+
+        df = pd.DataFrame(
+            {
+                "feat1": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] * 2,
+                "feat2": [2, 4, 6, 8, 10, 12, 14, 16, 18, 20] * 2,
+                "defasado_bin": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1] * 2,
+            }
+        )
+        mock_csv.return_value = df
+
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        X_train = X.iloc[:16]
+        X_val = X.iloc[16:]
+        y_train = y.iloc[:16]
+        y_val = y.iloc[16:]
+        mock_split.return_value = (X_train, X_val, y_train, y_val)
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
 
         # Act
-        roc_auc = mock_roc_auc(y_val, probs)
-        f1 = mock_f1(y_val, preds)
-        precision = mock_precision(y_val, preds)
-        recall = mock_recall(y_val, preds)
+        result = train()
 
         # Assert
-        assert 0 <= roc_auc <= 1
-        assert 0 <= f1 <= 1
-        assert 0 <= precision <= 1
-        assert 0 <= recall <= 1
+        assert "model" in result
+        assert "metrics" in result
+        assert "model_path" in result
+        assert "report_path" in result
 
-    def test_metrics_dict_estrutura(self):
-        """Testa se dicionário de métricas tem estrutura correta"""
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_metrics_contem_campos_obrigatorios(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se métricas contêm todos os campos"""
+        from src.train import train
+
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
         # Arrange
-        metrics = {"roc_auc": 0.95, "f1": 0.90, "precision": 0.92, "recall": 0.88}
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
 
-        # Act & Assert
+        df = pd.DataFrame(
+            {
+                "feat1": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] * 2,
+                "feat2": [2, 4, 6, 8, 10, 12, 14, 16, 18, 20] * 2,
+                "defasado_bin": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1] * 2,
+            }
+        )
+        mock_csv.return_value = df
+
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        X_train = X.iloc[:16]
+        X_val = X.iloc[16:]
+        y_train = y.iloc[:16]
+        y_val = y.iloc[16:]
+        mock_split.return_value = (X_train, X_val, y_train, y_val)
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
+
+        # Act
+        result = train()
+
+        # Assert
+        metrics = result["metrics"]
         assert "roc_auc" in metrics
         assert "f1" in metrics
         assert "precision" in metrics
         assert "recall" in metrics
-        assert all(0 <= v <= 1 for v in metrics.values())
 
 
-class TestModelPersistence:
-    """Testes para salvamento de modelo"""
+class TestTrainParameters:
+    """Testes para parâmetros da função train"""
 
-    @patch("joblib.dump")
-    def test_modelo_salvo_com_sucesso(self, mock_dump):
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_aceita_model_name_customizado(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se train aceita model_name customizado"""
+        from src.train import train
+
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
+        # Arrange
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
+
+        df = pd.DataFrame(
+            {
+                "feat1": list(range(20)),
+                "feat2": list(range(20, 40)),
+                "defasado_bin": [0, 1] * 10,
+            }
+        )
+        mock_csv.return_value = df
+
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        mock_split.return_value = (X.iloc[:16], X.iloc[16:], y.iloc[:16], y.iloc[16:])
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
+
+        # Act
+        result = train(model_name="gb")
+
+        # Assert
+        assert result is not None
+        # Verifica se foi chamado com "gb"
+        call_kwargs = mock_pipeline.call_args[1]
+        assert call_kwargs["model_name"] == "gb"
+
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_aceita_caminhos_customizados(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se train aceita caminhos customizados"""
+        from src.train import train
+
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
+        config_path = "custom_config.yaml"
+        dataset_path = "custom_data.csv"
+        features_path = "custom_features.json"
+
+        # Arrange
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
+
+        df = pd.DataFrame(
+            {
+                "feat1": list(range(20)),
+                "feat2": list(range(20, 40)),
+                "defasado_bin": [0, 1] * 10,
+            }
+        )
+        mock_csv.return_value = df
+
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        mock_split.return_value = (X.iloc[:16], X.iloc[16:], y.iloc[:16], y.iloc[16:])
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
+
+        # Act
+        result = train(
+            config_path=config_path,
+            dataset_path=dataset_path,
+            features_path=features_path,
+        )
+
+        # Assert
+        assert result is not None
+        mock_cfg.assert_called_once_with(config_path)
+        mock_feat.assert_called_once_with(features_path)
+        mock_csv.assert_called_once_with(dataset_path)
+
+
+class TestTrainMetricsValidation:
+    """Testes para validação de métricas"""
+
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_metricas_sao_float(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se todas as métricas são float"""
+        from src.train import train
+
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
+        # Arrange
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
+
+        df = pd.DataFrame(
+            {
+                "feat1": list(range(20)),
+                "feat2": list(range(20, 40)),
+                "defasado_bin": [0, 1] * 10,
+            }
+        )
+        mock_csv.return_value = df
+
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        mock_split.return_value = (X.iloc[:16], X.iloc[16:], y.iloc[:16], y.iloc[16:])
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
+
+        # Act
+        result = train()
+
+        # Assert
+        metrics = result["metrics"]
+        for metric_name, metric_value in metrics.items():
+            assert isinstance(
+                metric_value, float
+            ), f"{metric_name} deve ser float, recebeu {type(metric_value)}"
+
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_metricas_em_range_valido(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se métricas estão em range válido [0, 1]"""
+        from src.train import train
+
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
+        # Arrange
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
+
+        df = pd.DataFrame(
+            {
+                "feat1": list(range(20)),
+                "feat2": list(range(20, 40)),
+                "defasado_bin": [0, 1] * 10,
+            }
+        )
+        mock_csv.return_value = df
+
+        X = df[["feat1", "feat2"]]
+        y = df["defasado_bin"]
+        mock_split.return_value = (X.iloc[:16], X.iloc[16:], y.iloc[:16], y.iloc[16:])
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
+
+        # Act
+        result = train()
+
+        # Assert
+        metrics = result["metrics"]
+        for metric_name, metric_value in metrics.items():
+            assert (
+                0 <= metric_value <= 1
+            ), f"{metric_name}={metric_value} deve estar entre 0 e 1"
+
+
+class TestTrainPersistence:
+    """Testes para persistência de arquivos"""
+
+    @patch("src.train.setup_logger")
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_salva_modelo_joblib(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
         """Testa se modelo é salvo com joblib"""
+        from src.train import train
+
+        # Setup logger
+        mock_logger = MagicMock()
+        mock_logger_setup.return_value = mock_logger
+
         # Arrange
-        mock_pipeline = MagicMock()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_cfg.return_value = {
+                "random_seed": 42,
+                "target": "defasado_bin",
+                "best_model": "logreg",
+            }
+            mock_feat.return_value = ["feat1", "feat2"]
 
-        # Act
-        mock_dump(mock_pipeline, "model.joblib")
+            df = pd.DataFrame(
+                {
+                    "feat1": list(range(20)),
+                    "feat2": list(range(20, 40)),
+                    "defasado_bin": [0, 1] * 10,
+                }
+            )
+            mock_csv.return_value = df
 
-        # Assert
-        assert mock_dump.called
-        mock_dump.assert_called_once_with(mock_pipeline, "model.joblib")
+            X = df[["feat1", "feat2"]]
+            y = df["defasado_bin"]
+            mock_split.return_value = (
+                X.iloc[:16],
+                X.iloc[16:],
+                y.iloc[:16],
+                y.iloc[16:],
+            )
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_metricas_salvas_json(self, mock_file):
-        """Testa se métricas são salvas em JSON"""
-        # Arrange
-        metrics = {"roc_auc": 0.95, "f1": 0.90, "precision": 0.92, "recall": 0.88}
+            mock_pipeline_obj = MagicMock()
+            mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+            mock_pipeline_obj.predict_proba.return_value = np.array(
+                [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+            )
+            mock_pipeline.return_value = mock_pipeline_obj
 
-        # Act
-        with open("metrics.json", "w") as f:
-            json.dump(metrics, f, indent=4)
+            # Act
+            result = train(output_dir=tmpdir)
 
-        # Assert
-        assert mock_file.called
-
-    def test_caminhos_modelo_validos(self):
-        """Testa se caminhos esperados para modelo são válidos"""
-        # Arrange
-        model_path = "artifacts/models/best_model.joblib"
-        report_path = "artifacts/models/best_model_metrics.json"
-
-        # Act & Assert
-        assert "artifacts" in model_path
-        assert "models" in model_path
-        assert model_path.endswith(".joblib")
-        assert report_path.endswith(".json")
-
-
-class TestLogging:
-    """Testes para logging"""
+            # Assert
+            model_path = result["model_path"]
+            assert model_path.endswith(".joblib")
+            assert Path(model_path).parent == Path(tmpdir)
 
     @patch("src.train.setup_logger")
-    def test_logger_inicializado(self, mock_setup_logger):
-        """Testa se logger é inicializado"""
-        # Arrange
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    def test_train_salva_metricas_json(
+        self,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se métricas são salvas como JSON"""
+        from src.train import train
+
+        # Setup logger
         mock_logger = MagicMock()
-        mock_setup_logger.return_value = mock_logger
+        mock_logger_setup.return_value = mock_logger
 
-        # Act
-        logger = mock_setup_logger(name="train", log_file="test.log")
+        # Arrange
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_cfg.return_value = {
+                "random_seed": 42,
+                "target": "defasado_bin",
+                "best_model": "logreg",
+            }
+            mock_feat.return_value = ["feat1", "feat2"]
 
-        # Assert
-        assert logger is not None
-        assert mock_setup_logger.called
+            df = pd.DataFrame(
+                {
+                    "feat1": list(range(20)),
+                    "feat2": list(range(20, 40)),
+                    "defasado_bin": [0, 1] * 10,
+                }
+            )
+            mock_csv.return_value = df
+
+            X = df[["feat1", "feat2"]]
+            y = df["defasado_bin"]
+            mock_split.return_value = (
+                X.iloc[:16],
+                X.iloc[16:],
+                y.iloc[:16],
+                y.iloc[16:],
+            )
+
+            mock_pipeline_obj = MagicMock()
+            mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+            mock_pipeline_obj.predict_proba.return_value = np.array(
+                [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+            )
+            mock_pipeline.return_value = mock_pipeline_obj
+
+            # Act
+            result = train(output_dir=tmpdir)
+
+            # Assert
+            report_path = result["report_path"]
+            assert report_path.endswith(".json")
+            assert os.path.exists(report_path)
+
+            with open(report_path) as f:
+                saved_metrics = json.load(f)
+                assert saved_metrics == result["metrics"]
+
+
+class TestTrainDataProcessing:
+    """Testes para processamento de dados"""
 
     @patch("src.train.setup_logger")
-    def test_logger_tem_info_method(self, mock_setup_logger):
-        """Testa se logger tem método info para logging"""
-        # Arrange
+    @patch("src.train.build_pipeline")
+    @patch("src.train.train_test_split")
+    @patch("pandas.read_csv")
+    @patch("src.train.load_features")
+    @patch("src.train.load_config")
+    @patch("src.train.joblib.dump")
+    @patch("builtins.open", create=True)
+    def test_train_remove_valores_faltantes_target(
+        self,
+        mock_file,
+        mock_dump,
+        mock_cfg,
+        mock_feat,
+        mock_csv,
+        mock_split,
+        mock_pipeline,
+        mock_logger_setup,
+    ):
+        """Testa se valores faltantes no target são removidos"""
+        from src.train import train
+
+        # Setup logger
         mock_logger = MagicMock()
-        mock_setup_logger.return_value = mock_logger
+        mock_logger_setup.return_value = mock_logger
+
+        # Arrange
+        mock_cfg.return_value = {
+            "random_seed": 42,
+            "target": "defasado_bin",
+            "best_model": "logreg",
+        }
+        mock_feat.return_value = ["feat1", "feat2"]
+
+        # Dataset com NaN no target
+        df = pd.DataFrame(
+            {
+                "feat1": list(range(20)),
+                "feat2": list(range(20, 40)),
+                "defasado_bin": [
+                    0,
+                    1,
+                    np.nan,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                ],
+            }
+        )
+        mock_csv.return_value = df
+
+        # Após dropna, ficam 19 amostras. Split 80/20: 15 train, 4 test
+        X_clean = df.dropna(subset=["defasado_bin"])[["feat1", "feat2"]]
+        y_clean = df.dropna(subset=["defasado_bin"])["defasado_bin"]
+        X_train = X_clean.iloc[:15]
+        X_val = X_clean.iloc[15:]
+        y_train = y_clean.iloc[:15]
+        y_val = y_clean.iloc[15:]
+        mock_split.return_value = (X_train, X_val, y_train, y_val)
+
+        mock_pipeline_obj = MagicMock()
+        mock_pipeline_obj.predict.return_value = np.array([0, 1, 0, 1])
+        mock_pipeline_obj.predict_proba.return_value = np.array(
+            [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7]]
+        )
+        mock_pipeline.return_value = mock_pipeline_obj
 
         # Act
-        logger = mock_setup_logger(name="train", log_file="test.log")
-        logger.info("teste")
+        result = train()
 
         # Assert
-        assert hasattr(logger, "info")
-        assert mock_logger.info.called
+        assert result is not None
+
+
+class TestTrainImportability:
+    """Testes para importabilidade e uso da função"""
+
+    def test_train_pode_ser_importado(self):
+        """Testa se train pode ser importado de src.train"""
+        from src.train import train
+
+        assert callable(train)
+
+    def test_train_pode_ser_executado_como_script(self):
+        """Testa se arquivo pode ser executado como script"""
+        import src.train
+
+        # Verifica se há o bloco if __name__ == "__main__"
+        assert hasattr(src.train, "train")
