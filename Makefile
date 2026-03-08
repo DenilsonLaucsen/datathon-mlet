@@ -7,6 +7,9 @@ setup:
 	.venv/bin/pip install -r requirements-dev.txt
 	.venv/bin/pre-commit install
 
+train:
+	$(PYTHON) -m src.train
+
 sanity:
 	$(PYTHON) -m src.sanity_check
 
@@ -28,3 +31,19 @@ run:
 
 run-prod:
 	$(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+IMAGE_NAME=datathon-ml-api
+CONTAINER_NAME=datathon-ml-api
+
+docker-build:
+	docker build -t $(IMAGE_NAME) .
+
+docker-run:
+	docker run -p 8000:8000 $(IMAGE_NAME)
+
+docker-run-detached:
+	docker run -d -p 8000:8000 --name $(CONTAINER_NAME) $(IMAGE_NAME)
+
+docker-stop:
+	docker stop $(CONTAINER_NAME) || true
+	docker rm $(CONTAINER_NAME) || true

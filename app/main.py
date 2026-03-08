@@ -15,7 +15,7 @@ app = FastAPI(title="Student Defasagem Predictor", version="1.0.0")
 
 scheduler = BackgroundScheduler()
 
-scheduler.add_job(run_drift_check, "interval", minutes=1)
+scheduler.add_job(run_drift_check, "interval", minutes=30)
 
 scheduler.start()
 

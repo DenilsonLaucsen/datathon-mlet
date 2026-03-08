@@ -76,6 +76,22 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
+## Treinamento Inicial
+
+Após completar o setup, é necessário treinar o modelo antes de executar a aplicação:
+
+```bash
+make train
+```
+
+Ou manualmente:
+```bash
+source .venv/bin/activate
+python -m src.train
+```
+
+Isso prepara os artefatos necessários (`artifacts/models/`, `artifacts/feature_cols.json`) para a API funcionar corretamente.
+
 ## Sanity Check
 
 Validar que o projeto está bem configurado:
@@ -160,6 +176,30 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ### Docker
 
+#### Com Makefile (recomendado)
+
+**Build da imagem:**
+```bash
+make docker-build
+```
+
+**Executar container (modo interativo):**
+```bash
+make docker-run
+```
+
+**Executar container (em background):**
+```bash
+make docker-run-detached
+```
+
+**Parar e remover container:**
+```bash
+make docker-stop
+```
+
+#### Manualmente
+
 **Build da imagem:**
 ```bash
 docker build -t datathon-ml-api .
@@ -168,6 +208,17 @@ docker build -t datathon-ml-api .
 **Executar container:**
 ```bash
 docker run -p 8000:8000 datathon-ml-api
+```
+
+**Executar container em background:**
+```bash
+docker run -d -p 8000:8000 --name datathon-ml-api datathon-ml-api
+```
+
+**Parar container:**
+```bash
+docker stop datathon-ml-api
+docker rm datathon-ml-api
 ```
 
 A aplicação estará disponível em `http://localhost:8000`.
@@ -362,3 +413,38 @@ O projeto utiliza GitHub Actions para automação de testes e build:
 - **Dispara** a cada push em `main` e `dev`, e em pull requests
 
 Ver configuração em [.github/workflows/ci.yml](.github/workflows/ci.yml)
+
+## Monitoramento de Drift
+
+O projeto implementa um sistema automático de monitoramento para detectar mudanças na distribuição dos dados em produção.
+
+### Fluxo de Monitoramento
+
+1. **Predições**: Endpoint `/predict` da API recebe dados dos estudantes e salva as predições em `data/processed/latest_predictions.csv`
+
+2. **Drift Check Automático**: Um scheduler executa `monitoring/drift_check.py` a cada 30 minutos
+
+3. **Cálculo de Drift**: Compara a média de cada feature no dataset de treino com a média em produção, calculando a diferença absoluta
+
+4. **Relatório**: Resultado salvo em `artifacts/monitoring/drift_report.json`
+
+5. **Consulta**: Acesse `GET /monitoring/drift` para visualizar o relatório atual
+
+### Endpoints de Monitoramento
+
+- **Saúde da aplicação**: `GET /health`
+- **Relatório de drift**: `GET /monitoring/drift`
+
+### Entender o Drift Report
+
+O relatório apresenta a diferença absoluta de média para cada feature entre treino e produção. Valores altos indicam mudanças significativas nos dados:
+
+```json
+{
+  "Matematica": 0.15,
+  "Portugues": 0.22,
+  "IDA": 0.08
+}
+```
+
+Se o drift ultrapassar os limites esperados, pode indicar necessidade de retreinamento do modelo.
