@@ -305,10 +305,12 @@ class TestTrainParameters:
     @patch("src.train.load_features")
     @patch("src.train.load_config")
     @patch("src.train.joblib.dump")
+    @patch("src.train.Path")
     @patch("builtins.open", create=True)
     def test_train_aceita_caminhos_customizados(
         self,
         mock_file,
+        mock_path,
         mock_dump,
         mock_cfg,
         mock_feat,
@@ -328,7 +330,12 @@ class TestTrainParameters:
         dataset_path = "custom_data.csv"
         features_path = "custom_features.json"
 
-        # Arrange
+        # Arrange - Mock Path.exists() para retornar True
+        mock_path_instance = MagicMock()
+        mock_path_instance.exists.return_value = True
+        mock_path_instance.parent.mkdir = MagicMock()
+        mock_path.return_value = mock_path_instance
+
         mock_cfg.return_value = {
             "random_seed": 42,
             "target": "defasado_bin",

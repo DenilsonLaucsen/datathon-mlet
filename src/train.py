@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict
 
 import joblib
@@ -54,7 +55,24 @@ def train(
 
     # Carregamento de features
     logger.info("Carregando features")
-    features = load_features(features_path)
+    features_file = Path(features_path)
+
+    if features_file.exists():
+        logger.info("Arquivo de features encontrado")
+        features = load_features(features_path)
+    else:
+        logger.info("Arquivo de features não encontrado. Gerando automaticamente.")
+
+        df_tmp = pd.read_csv(dataset_path)
+
+        features = [col for col in df_tmp.columns if col != TARGET]
+
+        features_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(features_file, "w") as f:
+            json.dump({"features": features}, f, indent=4)
+
+        logger.info(f"Features salvas em {features_file}")
 
     # Carregamento de dataset
     logger.info("Carregando dataset")
